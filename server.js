@@ -37,7 +37,13 @@ function baseState(room){
     message:room.message||""
   };
 }
-function push(room){broadcast(room,baseState(room));}
+function push(room){
+  for(const p of room.players){
+    const st=baseState(room);
+    st.hand=room.game==="cards" ? p.hand : null;
+    send(p.ws,st);
+  }
+}
 function clearRoomTimers(room){clearTimeout(room.roundTimer);clearTimeout(room.targetTimer);clearTimeout(room.laserTimer);}
 function newTarget(room){
   room.target={id:Math.random().toString(36).slice(2),x:8+Math.random()*84,y:12+Math.random()*72};
