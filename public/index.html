@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quick Clash ⚡</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#10131a;color:#f7f7fb}main{max-width:900px;margin:auto;padding:24px}.card{background:#191e29;border:1px solid #303747;border-radius:18px;padding:20px;margin:14px 0}h1{font-size:40px;margin:0 0 6px}.muted{color:#aeb6c8}.row{display:flex;gap:10px;flex-wrap:wrap}input,button{font:inherit;border-radius:12px;padding:12px 14px;border:1px solid #3b4354}input{background:#0f131b;color:white;min-width:0;flex:1}button{background:#f4f5f7;color:#111827;font-weight:700;cursor:pointer;min-height:46px}button.secondary{background:#252c3a;color:white}.hidden{display:none!important}.rules{line-height:1.55}.players{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}.player{background:#11151e;border-radius:12px;padding:12px}.score{font-size:25px;font-weight:800}#arena{height:420px;position:relative;overflow:hidden;border-radius:16px;background:radial-gradient(circle at center,#263149,#121620);border:1px solid #3a4356}#target{position:absolute;width:58px;height:58px;border-radius:50%;background:#fff;box-shadow:0 0 0 8px rgba(255,255,255,.18);border:0;transform:translate(-50%,-50%);display:none}#target:after{content:"";position:absolute;inset:14px;border-radius:50%;background:#111827}.big{font-size:32px;font-weight:900}.center{text-align:center}@media(max-width:520px){main{padding:14px}h1{font-size:32px}#arena{height:330px}}
+</style>
+</head>
+<body>
+<main>
+<section id="home" class="card">
+<h1>⚡ Quick Clash</h1><p class="muted">A fast real-time target race for 2–6 players.</p>
+<div class="card rules"><strong>How to play</strong><ol>
+<li>Create a room or enter a 4-character room code.</li><li>When the match starts, a target appears.</li><li>Everyone races to click/tap it.</li><li>The first valid hit earns 1 point.</li><li>Targets disappear after 2.2 seconds if nobody hits.</li><li>The match lasts 60 seconds. Highest score wins.</li>
+</ol></div>
+<div class="row"><input id="name" maxlength="18" placeholder="Your name"><input id="room" maxlength="4" placeholder="Room code"><button id="create">Create room</button><button id="join" class="secondary">Join room</button></div>
+<p id="msg" class="muted" aria-live="polite"></p>
+</section>
+<section id="game" class="hidden">
+<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><div><strong>Room:</strong> <span id="code"></span></div><div class="big" id="timer">60.0</div></div><div id="players" class="players" style="margin-top:14px"></div></div>
+<div id="lobby" class="card center"><h2>Waiting for players</h2><p>Share the room code above. The creator starts when at least 2 players have joined.</p><button id="start">Start match</button><p id="gameMsg" class="muted"></p></div>
+<div id="play" class="card hidden"><div id="arena"><button id="target" aria-label="Hit target"></button></div><p class="center muted">Tap the target as soon as it appears.</p></div>
+<div id="result" class="card center hidden"><div class="big" id="winner"></div><p id="finalScores"></p><button id="rematch">Play again</button></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);let ws=null,myId=null,currentTarget=null,isCreator=false,lastState=null;
+function connect(msg){ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host);ws.onopen=()=>ws.send(JSON.stringify(msg));ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==="joined"){myId=m.id;$("home").classList.add("hidden");$("game").classList.remove("hidden")}if(m.type==="error")$("msg").textContent=m.message;if(m.type==="state")render(m);if(m.type==="hit")$("gameMsg").textContent=m.by+" scored!"};ws.onclose=()=>{if(!$("home").classList.contains("hidden"))return;$("gameMsg").textContent="Connection lost. Refresh to reconnect."}}
+function playerName(){return($("name").value.trim()||"Player").slice(0,18)}
+$("create").onclick=()=>connect({type:"create",name:playerName()});
+$("join").onclick=()=>connect({type:"join",name:playerName(),room:$("room").value.trim().toUpperCase()});
+$("start").onclick=()=>ws?.send(JSON.stringify({type:"start"}));$("rematch").onclick=()=>ws?.send(JSON.stringify({type:"rematch"}));
+$("target").onclick=()=>{if(currentTarget)ws?.send(JSON.stringify({type:"hit",targetId:currentTarget}))};
+function render(s){lastState=s;$("code").textContent=s.room;isCreator=s.players[0]?.id===myId;$("start").style.display=isCreator?"inline-block":"none";$("players").innerHTML=s.players.map(p=>`<div class="player"><div>${esc(p.name)}${p.id===myId?" (you)":""}</div><div class="score">${p.score}</div></div>`).join("");$("lobby").classList.toggle("hidden",s.status!=="lobby");$("play").classList.toggle("hidden",s.status!=="playing");$("result").classList.toggle("hidden",s.status!=="finished");if(s.status==="playing"){$("timer").textContent=(s.timeLeft/1000).toFixed(1);if(s.target){currentTarget=s.target.id;$("target").style.left=s.target.x+"%";$("target").style.top=s.target.y+"%";$("target").style.display="block"}}else{currentTarget=null;$("target").style.display="none"}if(s.status==="finished"){$("timer").textContent="0.0";$("winner").textContent=s.winner?`${s.winner.name} wins!`:"Match over";$("finalScores").textContent=s.players.sort((a,b)=>b.score-a.score).map(p=>`${p.name}: ${p.score}`).join(" • ");$("rematch").style.display=isCreator?"inline-block":"none"}}
+function esc(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+</script></body></html>
